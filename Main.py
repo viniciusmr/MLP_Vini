@@ -28,11 +28,6 @@ def MLP_single_pass(pesos_first_layer, pesos_hidden_layer, x, y, ni):
     output_1 = np.matmul(output_0, pesos_hidden_layer)   # Multiplicação de matriz: (1x5) por (5x3), resultando numa matriz (1x3)    
     output_1 = sigmoide(output_1)
 
-
-    #%  Diferença das respostas esperadas pelas saídas obtidas pelos 3 neurônios da última camada.
-    # erro = np.zeros(qtd_nr_layer[1])        #%a quantidade de neurônios de saída.
-    # for i in range(qtd_nr_layer[1]):        
-    #     erro[i] = output_1[i] * (1 - output_1[i]) * ( y[i] - output_1[i] )   #why the hell?? Esse método dá numeros menores para saídas com erros maiores.
     erro =  y - output_1 
     
 
