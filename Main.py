@@ -9,18 +9,18 @@ def sigmoide(layer_output):
     for i in range(len(layer_output)):
         layer_output[i] = 1 / (1 + math.exp(-1*layer_output[i]))
     return layer_output
+
+
+
  
-def MLP_single_pass(pesos_first_layer, pesos_hidden_layer, x, y, ni):
+def MLP_single_pass(pesos_first_layer, pesos_hidden_layer, x, y, ni, qtd_nr_c0, qtd_nr_c1, qtd_inputs):
 
-    # if pesos_first_layer is None and pesos_hidden_layer is None:            
-    #     pesos_first_layer  = np.random.rand(5,4) * 0.4 - 0.2
-    #     pesos_hidden_layer = np.random.rand(5,3) * 0.4 - 0.2
 
-    qtd_nr_layer = [4, 3]
-    # qtd_nr_layer = []
-    # qtd_nr_layer.append(pesos_first_layer.shape[1])    # 4
-    # qtd_nr_layer.append(pesos_hidden_layer.shape[1])   # 3
+    if pesos_first_layer is None and pesos_hidden_layer is None:            
+        pesos_first_layer  = np.random.rand(qtd_inputs+1,qtd_nr_c0) * 0.4 - 0.2
+        pesos_hidden_layer = np.random.rand(qtd_nr_c0+1,qtd_nr_c1) * 0.4 - 0.2
 
+    qtd_nr_layer = [qtd_nr_c0, qtd_nr_c1]
 
     #%  Primeira camada de neurônios
     x        = np.concatenate( ( [1], x ) )     # Colocando o bias.
@@ -32,18 +32,15 @@ def MLP_single_pass(pesos_first_layer, pesos_hidden_layer, x, y, ni):
     output_1 = output_0 @ pesos_hidden_layer   # Multiplicação de matriz: (1x5) por (5x3), resultando numa matriz (1x3)    
     output_1 = sigmoide(output_1)
 
+
     erro = y - output_1 
 
-    #  Diferença das respostas esperadas pelas saídas obtidas pelos 3 neurônios da última camada.
-    # erro = np.zeros(qtd_nr_layer[1])        #a quantidade de neurônios de saída.
-    # for i in range(qtd_nr_layer[1]):        
-    #     erro[i] = output_1[i] * (1 - output_1[i]) * ( y[i] - output_1[i] )   #why the hell?? Esse método dá numeros menores para saídas com erros maiores.
 
     #%  ============================================================================    
     icognita = np.zeros(qtd_nr_layer[0]+1)              # é o tamanho da pesos_hidden_layer
     
     for i in range (qtd_nr_layer[0]+1):                 # quantidade de pesos na primeira camada (4 + bias = 5)
-        temp = np.zeros(1)                              # temp = 0
+        temp = 0                                        # np.zeros(1) 
         for j in range(qtd_nr_layer[1]):                # quantidade de neuronios de saída (3)
             temp += erro[j] * pesos_hidden_layer[i,j]              # multiplica o erro da saída de cada neuronio, com cada peso que contribuiu para a saída.           
         icognita[i] = output_0[i] * (1-output_0[i]) * temp
@@ -57,7 +54,7 @@ def MLP_single_pass(pesos_first_layer, pesos_hidden_layer, x, y, ni):
 
 
     #   Atualizando os pesos da camada inicial    
-    for i in range(qtd_nr_layer[0]+1):                                      # quantidade de entradas na camada inicial. (4 + 1 com bias = 5)
+    for i in range(qtd_inputs+1):                                      # quantidade de entradas na camada inicial. (4 + 1 com bias = 5)
        for j in range(qtd_nr_layer[0]):                                     # quantidade de neuronios na camada inicial:  4
            pesos_first_layer[i,j] = pesos_first_layer[i,j] + ni * icognita[j+1] * x[i] 
        
@@ -75,20 +72,22 @@ y = np.array([[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1
 #quantidade de entradas na camada intermediária (q tbm é a final, e portanto: saída): 3
 
 
+pesos_first_layer = None
+pesos_hidden_layer = None
 
-if len(sys.argv) == 2:
-    qtd_treinos = int(sys.argv[1])
+# pesos_first_layer  = np.random.rand(5,4) * 0.4 - 0.2
+# pesos_hidden_layer = np.random.rand(5,3) * 0.4 - 0.2
 
-# pesos_first_layer = None
-# pesos_hidden_layer = None
-
-pesos_first_layer  = np.random.rand(5,4) * 0.4 - 0.2
-pesos_hidden_layer = np.random.rand(5,3) * 0.4 - 0.2
-    
 learning_rate = 0.02
 
 qtd_treinos = 100
 
+if len(sys.argv) == 2:
+    qtd_treinos = int(sys.argv[1])
+
+qtd_inputs = 4
+qtd_nr_c0 = 12
+qtd_nr_c1 = 3
 
 sum_error = np.zeros( qtd_treinos ) 
 samplesize = len(x)
@@ -101,12 +100,12 @@ for i in range (qtd_treinos):
     sum_erro = 0
     for j in range (samplesize):
 
-        (erro, pesos_first_layer, pesos_hidden_layer, o) = MLP_single_pass(pesos_first_layer, pesos_hidden_layer, x[j,:], y[j,:], learning_rate)        
+        (erro, pesos_first_layer, pesos_hidden_layer, o) = MLP_single_pass(pesos_first_layer, pesos_hidden_layer, x[j,:], y[j,:], learning_rate, qtd_nr_c0, qtd_nr_c1, qtd_inputs)        
 
         outputs = np.array([o[0], o[1], o[2]])
         sum_erro += sum(erro)
         index = np.unravel_index(np.argmax(outputs), outputs.shape)[0]        
         if (y[j,index] == 1):
             num_acertos = num_acertos + 1
-    print ('Treino %d - Acertos: %d/%d Sum: %.5f \n' % (i, num_acertos, samplesize, sum_erro ) )
+    print ('Treino %d - Acertos: %d/%d Sum: %.5f \n' % (i+1, num_acertos, samplesize, sum_erro ) )
     num_acertos = 0
