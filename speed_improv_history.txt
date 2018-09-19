@@ -1,0 +1,24 @@
+
+              First version (pure python)
+========================================================== 1.0 baseline speed.
+0,02000 segundos por amostra = 20ms por amostra
+
+500 amostras -> 0,02s * 500 = 10 segundos.
+                   
+
+
+
+ Second version (isolate call to function and @jit it)
+==========================================================    35x improve over v1
+0,00056 segundos por amostra = 0,56ms por amostra
+
+500 amostras -> 0,00056s * 500 = 0,28 segundos.
+
+
+
+
+           Third version (@jit everything)
+==========================================================   74x improve over v1 (~2x over v2)
+0,00027 segundos por amostra = 0,27ms por amostra
+
+500 amostras -> 0,00027s * 500 = 0,135 segundos.
