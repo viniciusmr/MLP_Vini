@@ -3,8 +3,17 @@ import random
 import math
 import numpy as np
 import sys
-import pickle
-# import time
+from numba import jit
+# from numba import autojit, prange
+# from numba import njit, prange
+# import numba
+# import cython
+import humanfriendly
+import time
+# import multiprocessing
+# from multiprocessing import Pool
+# from itertools import product
+# from line_profiler import LineProfiler
 
 
 def Load_Match_inputs(quantidade=None):
@@ -27,7 +36,6 @@ def Load_Match_inputs(quantidade=None):
 
 
     for i in range(quantidade):
-
         count_index_x = 0
 
         y[i] = partidas[i][10]
@@ -61,17 +69,17 @@ def sigmoide(layer_output):
         layer_output[i] = 1 / (1 + math.exp(-1*layer_output[i]))
     return layer_output
 
+# @numba.jit(nopython=True, parallel=True)
+@jit
+def atualiza_pesos_camada_inicial(qtd_inputs, qtd_nr_layer, back_prp_erro, ni, x):
+    tmp_pesos = np.zeros((251,125))
+    for i in range(qtd_inputs+1):                                      # quantidade de entradas na camada inicial. (4 + 1 com bias = 5)
+       for j in range(qtd_nr_layer[0]):                                     # quantidade de neuronios na camada inicial:  4
+           tmp_pesos[i,j] = ni * back_prp_erro[j+1] * x[i] 
+    return tmp_pesos
 
- 
-def MLP_single_pass(pesos, x, y, ni, qtd_nr_layer, qtd_inputs):
 
-    qtd_de_camadas = len(qtd_nr_layer)
-
-    if pesos is None:
-        pesos = []
-        pesos.append(np.random.rand(qtd_inputs+1,qtd_nr_layer[0]) * 0.4 - 0.2)
-        for i in range (1,qtd_de_camadas):
-            pesos.append(np.random.rand(qtd_nr_layer[i-1]+1,qtd_nr_layer[i]) * 0.4 - 0.2)
+def MLP_single_pass(pesos, x, y, ni, qtd_nr_layer, qtd_inputs, qtd_de_camadas):
 
 
     output_layer = []
@@ -92,10 +100,10 @@ def MLP_single_pass(pesos, x, y, ni, qtd_nr_layer, qtd_inputs):
     
 
     #%  ===============================================================================================================================================    
-    back_prp_erro = np.zeros(qtd_nr_layer[0]+1)              # é o tamanho da ultima camada.
+    back_prp_erro = np.zeros(qtd_nr_layer[0]+1)              #  Quantidade de neuronios na primeira camada +1. [1 x 126] ////// é o tamanho da ultima camada.(?????)
     
 
-    for i in range (qtd_nr_layer[0]+1):                 # quantidade de pesos na camada anterior a última (4 + bias = 5)
+    for i in range (qtd_nr_layer[0]+1):                 # quantidade de pesos na camada anterior a última (125 + bias = 126)
         temp = 0                                        
         for j in range(qtd_nr_layer[1]):                # quantidade de neuronios de saída (3)
             temp += erro[j] * pesos[1][i,j]              # multiplica o erro da saída de cada neuronio, com cada peso que contribuiu para a saída.           
@@ -108,11 +116,10 @@ def MLP_single_pass(pesos, x, y, ni, qtd_nr_layer, qtd_inputs):
         for j in range (qtd_nr_layer[1]):                                   # quantidade de neuronios na camada intermediária:  3
             pesos[1][i,j] = pesos[1][i,j] + ni * erro[j] * output_layer[0][i]                       
 
-
-    #   Atualizando os pesos da camada inicial    
-    for i in range(qtd_inputs+1):                                      # quantidade de entradas na camada inicial. (4 + 1 com bias = 5)
-       for j in range(qtd_nr_layer[0]):                                     # quantidade de neuronios na camada inicial:  4
-           pesos[0][i,j] = pesos[0][i,j] + ni * back_prp_erro[j+1] * x[i] 
+    #   Atulizando os pesos da primeira camada
+    
+    diff_pesos = atualiza_pesos_camada_inicial(qtd_inputs, qtd_nr_layer, back_prp_erro, ni, x)
+    pesos[0] = pesos[0] + diff_pesos
        
 
     erro = abs( y - output_layer[1] )
@@ -126,48 +133,62 @@ def MLP_single_pass(pesos, x, y, ni, qtd_nr_layer, qtd_inputs):
 
 
 def main():
-        
-    x,y = Load_Match_inputs(500)
+
+    # pool = multiprocessing.Pool(processes=2)
+    # pool = Pool()
 
 
-    learning_rate = 0.05
 
     qtd_treinos = 100
     if len(sys.argv) == 2:
         qtd_treinos = int(sys.argv[1])
 
-    qtd_inputs = 250
+    learning_rate = 0.05
 
-    qtd_nr = []
-    qtd_nr.append(125)
-    qtd_nr.append(1)
+    x,y = Load_Match_inputs(25000)
+    samplesize = len(x)
+    qtd_inputs = len(x[0])
+
+
+    qtd_nr_layer = []
+    qtd_nr_layer.append(125)
+    qtd_nr_layer.append(1)
+
+    qtd_de_camadas = len(qtd_nr_layer)
+
 
     pesos = None
 
-    sum_error = np.zeros( qtd_treinos ) 
+    if pesos is None:
+        pesos = []
+        pesos.append(np.random.rand(qtd_inputs+1,qtd_nr_layer[0]) * 0.4 - 0.2)
+        for i in range (1,qtd_de_camadas):
+            pesos.append(np.random.rand(qtd_nr_layer[i-1]+1,qtd_nr_layer[i]) * 0.4 - 0.2)
 
-    samplesize = len(x)
 
+    
     print ("Começando")
-
-
-
-
+    sum_error = np.zeros( qtd_treinos ) 
     for i in range (qtd_treinos):
         sum_erro = 0
         num_acertos = 0
+        t1 = time.time()
         for j in range (samplesize):
-
-            (erro, pesos, output) = MLP_single_pass(pesos, x[j,:], y[j,:], learning_rate, qtd_nr, qtd_inputs)        
-
+            # lp = LineProfiler()
+            # lp_wrapper = lp(MLP_single_pass)
+            # lp_wrapper(pesos, x[j,:], y[j,:], learning_rate, qtd_nr_layer, qtd_inputs, qtd_de_camadas)
+            # lp.print_stats()            
+            (erro, pesos, output) = MLP_single_pass(pesos, x[j,:], y[j,:], learning_rate, qtd_nr_layer, qtd_inputs, qtd_de_camadas)        
+            
             sum_erro += sum(erro)
             
             if y[j][0] == round(output[0]) :
                 num_acertos = num_acertos + 1
-
-        print ('Treino %d - Acertos: %d/%d Sum: %.5f \n' % (i+1, num_acertos, samplesize, sum_erro ) )
+        t2 = time.time()
+        print ('Treino %d - Acertos: %d/%d Sum: %.5f Tempo gasto: %s\n' % (i+1, num_acertos, samplesize, sum_erro, humanfriendly.format_timespan(t2 - t1, detailed=True, max_units=5) ) )
         
 
-
-import profile
-profile.run('main()')
+# import profile
+# profile.run('main()')
+if __name__ == "__main__":
+    main()
