@@ -150,6 +150,8 @@ def main():
     if len(sys.argv) == 2:
         qtd_treinos = int(sys.argv[1])
 
+    learning_rate_begin = 0.05
+    learning_rate_final = 0.01
     learning_rate = 0.05
 
     x,y = Load_Match_inputs(5000)
@@ -158,7 +160,7 @@ def main():
 
 
     qtd_nr_layer = []
-    qtd_nr_layer.append(300)
+    qtd_nr_layer.append(60)
     qtd_nr_layer.append(1)
 
     qtd_de_camadas = len(qtd_nr_layer)
@@ -185,14 +187,17 @@ def main():
             # lp_wrapper = lp(MLP_single_pass)
             # lp_wrapper(pesos, x[j,:], y[j,:], learning_rate, qtd_nr_layer, qtd_inputs, qtd_de_camadas)
             # lp.print_stats()            
+            learning_rate = learning_rate_final + (1 - i/qtd_treinos) * (learning_rate_begin - learning_rate_final)
             (erro, pesos, output) = MLP_single_pass(pesos, x[j,:], y[j,:], learning_rate, qtd_nr_layer, qtd_inputs, qtd_de_camadas)        
             
+
+
             sum_erro += sum(erro)
             
             if y[j][0] == round(output[0]) :
                 num_acertos = num_acertos + 1
         t2 = time.time()
-        print ('Treino %d - Acertos: %d/%d Sum: %.5f Tempo gasto: %s\n' % (i+1, num_acertos, samplesize, sum_erro, humanfriendly.format_timespan(t2 - t1, detailed=True, max_units=5) ) )
+        print ('Treino %d - Acertos: %d/%d Sum: %.5f LR: %.5f Tempo gasto: %s\n' % (i+1, num_acertos, samplesize, sum_erro, learning_rate, humanfriendly.format_timespan(t2 - t1, detailed=True, max_units=5) ) )
         
 
 # import profile
