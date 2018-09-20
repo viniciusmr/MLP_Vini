@@ -151,16 +151,16 @@ def main():
         qtd_treinos = int(sys.argv[1])
 
     learning_rate_begin = 0.05
-    learning_rate_final = 0.01
+    learning_rate_final = 0.005
     learning_rate = 0.05
 
-    x,y = Load_Match_inputs(5000)
+    x,y = Load_Match_inputs(1000)
     samplesize = len(x)
     qtd_inputs = len(x[0])
 
 
     qtd_nr_layer = []
-    qtd_nr_layer.append(60)
+    qtd_nr_layer.append(240)
     qtd_nr_layer.append(1)
 
     qtd_de_camadas = len(qtd_nr_layer)
@@ -197,7 +197,7 @@ def main():
             if y[j][0] == round(output[0]) :
                 num_acertos = num_acertos + 1
         t2 = time.time()
-        print ('Treino %d - Acertos: %d/%d Sum: %.5f LR: %.5f Tempo gasto: %s\n' % (i+1, num_acertos, samplesize, sum_erro, learning_rate, humanfriendly.format_timespan(t2 - t1, detailed=True, max_units=5) ) )
+        print ('Treino %d - Acertos: %d/%d Sum: %.5f LR: %.4f Tempo gasto: %s\n' % (i+1, num_acertos, samplesize, sum_erro, learning_rate, humanfriendly.format_timespan(t2 - t1, detailed=True, max_units=5) ) )
         
 
 # import profile
