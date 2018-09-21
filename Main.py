@@ -3,17 +3,12 @@ import random
 import math
 import numpy as np
 import sys
-from numba import jit, float64, autojit
-# from numba import autojit, prange
-# from numba import njit, prange
-import numba
+from numba import autojit, prange, jit
 import cython
 import humanfriendly
 import time
-# import multiprocessing
-# from multiprocessing import Pool
-# from itertools import product
-# from line_profiler import LineProfiler
+from line_profiler import LineProfiler
+import profile
 
 
 def Load_Match_inputs(quantidade=None):
@@ -30,10 +25,8 @@ def Load_Match_inputs(quantidade=None):
     with open('partidas_python_obj.pkl', 'rb') as fp:
         partidas = np.load(fp)
 
-
-    x = np.zeros((quantidade,250))
-    y = np.zeros((quantidade,1))
-
+    x = np.zeros((quantidade, 250))
+    y = np.zeros((quantidade, 1))
 
     for i in range(quantidade):
         count_index_x = 0
@@ -52,7 +45,7 @@ def Load_Match_inputs(quantidade=None):
                 count_index_x += 1
 
         for hero in partidas[i][5:10]:
-            x[i][count_index_x : count_index_x+16] = hero_winrate[hero]
+            x[i][count_index_x: count_index_x+16] = hero_winrate[hero]
             count_index_x += 16
             for hero_amigo in partidas[i][5:10]:
                 if hero != hero_amigo:
@@ -63,36 +56,28 @@ def Load_Match_inputs(quantidade=None):
                 count_index_x += 1
     return (x,y)
 
-@autojit(nogil=True, nopython=True)
+
+@autojit(nogil=True, nopython=True, cache=True)
 def sigmoide(layer_output):
     for i in range(len(layer_output)):
         layer_output[i] = 1 / (1 + math.exp(-1*layer_output[i]))
     return layer_output
 
+
 # @jit(nopython=True, parallel=True)
-# @autojit
-# def atualiza_pesos_camada_inicial(qtd_inputs, qtd_nr_layer, back_prp_erro, ni, x):
-#     tmp_pesos = np.zeros((qtd_inputs+1,qtd_nr_layer[0]))
-#     for i in range(qtd_inputs+1):                                      # quantidade de entradas na camada inicial + bias: 251 
-#        for j in range(qtd_nr_layer[0]):                                   # quantidade de neuronios na camada inicial:  125
-#            tmp_pesos[i,j] = ni * back_prp_erro[j+1] * x[i] 
-#     return tmp_pesos
-
-# @jit(nopython=True, parallel=False)
-@autojit(nogil=True, nopython=True)
+@autojit(nogil=True, nopython=True, cache=True)
 def atualiza_pesos_camada_inicial_pro(back_prp_erro, x, ni):   
-    return (x * back_prp_erro  * ni  )
+    return (x * back_prp_erro * ni)
 
-@autojit(nogil=True)
+
+#@autojit(nogil=True, cache=True)
 def MLP_single_pass(pesos, x, y, ni, qtd_nr_layer, qtd_inputs, qtd_de_camadas):
-
 
     output_layer = []
 
-    x = np.concatenate( ( [1], x ) )                   # Colocando o bias.
+    x = np.concatenate( ( [1], x ) )                   
     output_layer.append(x @ pesos[0])                  # Multiplicação de matriz (1x250) por (250x125), resultando numa matriz (1x125)    np.matmul com perf output é mais fast.
-    output_layer[0] = sigmoide(output_layer[0])        # Função de ativação sigmoide. 
-    
+    output_layer[0] = sigmoide(output_layer[0])        # Função de ativação sigmoide.
 
     for num_camada in range(qtd_de_camadas-1):         # calculando a saída de cada camada seguinte.
         output_layer[num_camada] = np.concatenate( ( [1], output_layer[num_camada] ) )   # Colocando o bias.
@@ -102,7 +87,6 @@ def MLP_single_pass(pesos, x, y, ni, qtd_nr_layer, qtd_inputs, qtd_de_camadas):
 
     erro = y - output_layer[qtd_de_camadas-1] 
 
-    
 
     #%  ===============================================================================================================================================    
     back_prp_erro = np.zeros(qtd_nr_layer[0]+1)              #  Quantidade de neuronios na primeira camada +1. [1 x 126] ////// é o tamanho da ultima camada.(?????)
@@ -113,7 +97,6 @@ def MLP_single_pass(pesos, x, y, ni, qtd_nr_layer, qtd_inputs, qtd_de_camadas):
         for j in range(qtd_nr_layer[1]):                # quantidade de neuronios de saída (3)
             temp += erro[j] * pesos[1][i,j]              # multiplica o erro da saída de cada neuronio, com cada peso que contribuiu para a saída.           
         back_prp_erro[i] = output_layer[0][i] * (1-output_layer[0][i]) * temp
-
     
 
     #   Atulizando os pesos da camada final    
@@ -133,18 +116,8 @@ def MLP_single_pass(pesos, x, y, ni, qtd_nr_layer, qtd_inputs, qtd_de_camadas):
     return (erro, pesos, output_layer[1])
 
 
-@autojit(nogil=True)
+# @autojit()
 def main():
-
-    # pool = multiprocessing.Pool(processes=2)
-    # pool = Pool()
-
-
-
-    # x = np.array([[5.1,3.5,1.4,0.2],[4.9,3.0,1.4,0.2],[4.7,3.2,1.3,0.2],[4.6,3.1,1.5,0.2],[5.0,3.6,1.4,0.2],[5.4,3.9,1.7,0.4],[4.6,3.4,1.4,0.3],[5.0,3.4,1.5,0.2],[4.4,2.9,1.4,0.2],[4.9,3.1,1.5,0.1],[5.4,3.7,1.5,0.2],[4.8,3.4,1.6,0.2],[4.8,3.0,1.4,0.1],[4.3,3.0,1.1,0.1],[5.8,4.0,1.2,0.2],[5.7,4.4,1.5,0.4],[5.4,3.9,1.3,0.4],[5.1,3.5,1.4,0.3],[5.7,3.8,1.7,0.3],[5.1,3.8,1.5,0.3],[5.4,3.4,1.7,0.2],[5.1,3.7,1.5,0.4],[4.6,3.6,1.0,0.2],[5.1,3.3,1.7,0.5],[4.8,3.4,1.9,0.2],[5.0,3.0,1.6,0.2],[5.0,3.4,1.6,0.4],[5.2,3.5,1.5,0.2],[5.2,3.4,1.4,0.2],[4.7,3.2,1.6,0.2],[4.8,3.1,1.6,0.2],[5.4,3.4,1.5,0.4],[5.2,4.1,1.5,0.1],[5.5,4.2,1.4,0.2],[4.9,3.1,1.5,0.2],[5.0,3.2,1.2,0.2],[5.5,3.5,1.3,0.2],[4.9,3.6,1.4,0.1],[4.4,3.0,1.3,0.2],[5.1,3.4,1.5,0.2],[5.0,3.5,1.3,0.3],[4.5,2.3,1.3,0.3],[4.4,3.2,1.3,0.2],[5.0,3.5,1.6,0.6],[5.1,3.8,1.9,0.4],[4.8,3.0,1.4,0.3],[5.1,3.8,1.6,0.2],[4.6,3.2,1.4,0.2],[5.3,3.7,1.5,0.2],[5.0,3.3,1.4,0.2],[7.0,3.2,4.7,1.4],[6.4,3.2,4.5,1.5],[6.9,3.1,4.9,1.5],[5.5,2.3,4.0,1.3],[6.5,2.8,4.6,1.5],[5.7,2.8,4.5,1.3],[6.3,3.3,4.7,1.6],[4.9,2.4,3.3,1.0],[6.6,2.9,4.6,1.3],[5.2,2.7,3.9,1.4],[5.0,2.0,3.5,1.0],[5.9,3.0,4.2,1.5],[6.0,2.2,4.0,1.0],[6.1,2.9,4.7,1.4],[5.6,2.9,3.6,1.3],[6.7,3.1,4.4,1.4],[5.6,3.0,4.5,1.5],[5.8,2.7,4.1,1.0],[6.2,2.2,4.5,1.5],[5.6,2.5,3.9,1.1],[5.9,3.2,4.8,1.8],[6.1,2.8,4.0,1.3],[6.3,2.5,4.9,1.5],[6.1,2.8,4.7,1.2],[6.4,2.9,4.3,1.3],[6.6,3.0,4.4,1.4],[6.8,2.8,4.8,1.4],[6.7,3.0,5.0,1.7],[6.0,2.9,4.5,1.5],[5.7,2.6,3.5,1.0],[5.5,2.4,3.8,1.1],[5.5,2.4,3.7,1.0],[5.8,2.7,3.9,1.2],[6.0,2.7,5.1,1.6],[5.4,3.0,4.5,1.5],[6.0,3.4,4.5,1.6],[6.7,3.1,4.7,1.5],[6.3,2.3,4.4,1.3],[5.6,3.0,4.1,1.3],[5.5,2.5,4.0,1.3],[5.5,2.6,4.4,1.2],[6.1,3.0,4.6,1.4],[5.8,2.6,4.0,1.2],[5.0,2.3,3.3,1.0],[5.6,2.7,4.2,1.3],[5.7,3.0,4.2,1.2],[5.7,2.9,4.2,1.3],[6.2,2.9,4.3,1.3],[5.1,2.5,3.0,1.1],[5.7,2.8,4.1,1.3],[6.3,3.3,6.0,2.5],[5.8,2.7,5.1,1.9],[7.1,3.0,5.9,2.1],[6.3,2.9,5.6,1.8],[6.5,3.0,5.8,2.2],[7.6,3.0,6.6,2.1],[4.9,2.5,4.5,1.7],[7.3,2.9,6.3,1.8],[6.7,2.5,5.8,1.8],[7.2,3.6,6.1,2.5],[6.5,3.2,5.1,2.0],[6.4,2.7,5.3,1.9],[6.8,3.0,5.5,2.1],[5.7,2.5,5.0,2.0],[5.8,2.8,5.1,2.4],[6.4,3.2,5.3,2.3],[6.5,3.0,5.5,1.8],[7.7,3.8,6.7,2.2],[7.7,2.6,6.9,2.3],[6.0,2.2,5.0,1.5],[6.9,3.2,5.7,2.3],[5.6,2.8,4.9,2.0],[7.7,2.8,6.7,2.0],[6.3,2.7,4.9,1.8],[6.7,3.3,5.7,2.1],[7.2,3.2,6.0,1.8],[6.2,2.8,4.8,1.8],[6.1,3.0,4.9,1.8],[6.4,2.8,5.6,2.1],[7.2,3.0,5.8,1.6],[7.4,2.8,6.1,1.9],[7.9,3.8,6.4,2.0],[6.4,2.8,5.6,2.2],[6.3,2.8,5.1,1.5],[6.1,2.6,5.6,1.4],[7.7,3.0,6.1,2.3],[6.3,3.4,5.6,2.4],[6.4,3.1,5.5,1.8],[6.0,3.0,4.8,1.8],[6.9,3.1,5.4,2.1],[6.7,3.1,5.6,2.4],[6.9,3.1,5.1,2.3],[5.8,2.7,5.1,1.9],[6.8,3.2,5.9,2.3],[6.7,3.3,5.7,2.5],[6.7,3.0,5.2,2.3],[6.3,2.5,5.0,1.9],[6.5,3.0,5.2,2.0],[6.2,3.4,5.4,2.3],[5.9,3.0,5.1,1.8]])
-    # y = np.array([[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,0,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1]])
-
-
 
     qtd_treinos = 100
     if len(sys.argv) == 2:
@@ -154,13 +127,13 @@ def main():
     learning_rate_final = 0.005
     learning_rate = 0.05
 
-    x,y = Load_Match_inputs(1000)
+    x,y = Load_Match_inputs(5000)
     samplesize = len(x)
     qtd_inputs = len(x[0])
 
 
     qtd_nr_layer = []
-    qtd_nr_layer.append(240)
+    qtd_nr_layer.append(125)
     qtd_nr_layer.append(1)
 
     qtd_de_camadas = len(qtd_nr_layer)
@@ -177,17 +150,23 @@ def main():
 
     
     print ("Começando")
-    sum_error = np.zeros( qtd_treinos ) 
+    min_error = 9999999
+    min_error_t = 0
+    max_acertos = 0
+    max_acertos_t = 0
+
     for i in range (qtd_treinos):
         sum_erro = 0
         num_acertos = 0
-        t1 = time.time()
+
+        learning_rate = learning_rate_final + (1 - i/qtd_treinos) * (learning_rate_begin - learning_rate_final)
+        t1 = time.time()        
         for j in range (samplesize):
-            # lp = LineProfiler()
+            # lp = LineProfiler()            
             # lp_wrapper = lp(MLP_single_pass)
-            # lp_wrapper(pesos, x[j,:], y[j,:], learning_rate, qtd_nr_layer, qtd_inputs, qtd_de_camadas)
-            # lp.print_stats()            
-            learning_rate = learning_rate_final + (1 - i/qtd_treinos) * (learning_rate_begin - learning_rate_final)
+            # (erro, pesos, output) = lp_wrapper(pesos, x[j,:], y[j,:], learning_rate, qtd_nr_layer, qtd_inputs, qtd_de_camadas)
+            # lp.print_stats()     
+            # time.sleep(999)       
             (erro, pesos, output) = MLP_single_pass(pesos, x[j,:], y[j,:], learning_rate, qtd_nr_layer, qtd_inputs, qtd_de_camadas)        
             
 
@@ -197,10 +176,20 @@ def main():
             if y[j][0] == round(output[0]) :
                 num_acertos = num_acertos + 1
         t2 = time.time()
-        print ('Treino %d - Acertos: %d/%d Sum: %.5f LR: %.4f Tempo gasto: %s\n' % (i+1, num_acertos, samplesize, sum_erro, learning_rate, humanfriendly.format_timespan(t2 - t1, detailed=True, max_units=5) ) )
-        
+        if sum_erro < min_error:
+            min_error = sum_erro
+            min_error_t = (i+1)
+        if num_acertos > max_acertos:
+            max_acertos = num_acertos
+            max_acertos_t = (i+1)
 
-# import profile
-# profile.run('main()')
+        print ('Época %d/%d\n - AvgErro: %.4f - Acertos: %.4f LR: %.4f Tempo gasto: %s\n' % (i+1, qtd_treinos, sum_erro/samplesize, num_acertos/samplesize, learning_rate, humanfriendly.format_timespan(t2 - t1, detailed=True, max_units=5) ) )
+    print ("Menor soma de erros registrada: %.4f no treino número: %d \nMaior qtd de acertos registrada: %d/%d no treino número: %d" % (min_error,min_error_t,max_acertos,samplesize,max_acertos_t) )
+    lp = LineProfiler()            
+    lp_wrapper = lp(MLP_single_pass)
+    (erro, pesos, output) = lp_wrapper(pesos, x[j,:], y[j,:], learning_rate, qtd_nr_layer, qtd_inputs, qtd_de_camadas)
+    lp.print_stats()         
+
 if __name__ == "__main__":
     main()
+# profile.run('main()')
